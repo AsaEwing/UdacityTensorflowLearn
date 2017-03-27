@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+# python3 -m tensorflow.tensorboard --logdir=run1:/tmp/ufLearn/1,run2:/tmp/ufLearn/2 --port=6006
 # TODO:..................................2
 print("# # # 2 # # #")
 
@@ -13,6 +14,7 @@ import tensorflow as tf
 import six.moves.cPickle as pickle
 from six.moves import range
 
+logs_path1 = "/tmp/ufLearn/1"
 print("### End 1")
 
 # TODO:2
@@ -65,39 +67,54 @@ with graph.as_default():
     # Input data.
     # Load the training, validation and test data into constants that are
     # attached to the graph.
-    tf_train_dataset = tf.constant(train_dataset[:train_subset, :])
-    tf_train_labels = tf.constant(train_labels[:train_subset])
-    tf_valid_dataset = tf.constant(valid_dataset)
-    tf_test_dataset = tf.constant(test_dataset)
+    with tf.name_scope('input'):
+        tf_train_dataset = tf.constant(train_dataset[:train_subset, :], name='train_dataset')
+        tf_train_labels = tf.constant(train_labels[:train_subset], name='train_labels')
+
+        tf_valid_dataset = tf.constant(valid_dataset, name='valid_dataset')
+        tf_test_dataset = tf.constant(test_dataset, name='test_dataset')
 
     # Variables.
     # These are the parameters that we are going to be training. The weight
     # matrix will be initialized using random values following a (truncated)
     # normal distribution. The biases get initialized to zero.
-    weights = tf.Variable(
-        tf.truncated_normal([image_size * image_size, num_labels]))
-    biases = tf.Variable(tf.zeros([num_labels]))
+    with tf.name_scope("weights"):
+        weights = tf.Variable(tf.truncated_normal([image_size * image_size, num_labels]), name='W')
+    with tf.name_scope("biases"):
+        biases = tf.Variable(tf.zeros([num_labels]), name='b')
 
     # Training computation.
     # We multiply the inputs with the weight matrix, and add biases. We compute
     # the softmax and cross-entropy (it's one operation in TensorFlow, because
     # it's very common, and it can be optimized). We take the average of this
     # cross-entropy across all training examples: that's our loss.
-    logits = tf.matmul(tf_train_dataset, weights) + biases
-    loss = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels, logits=logits))
+    with tf.name_scope('Layer'):
+        train_logits = tf.matmul(tf_train_dataset, weights) + biases
+        valid_logits = tf.matmul(tf_valid_dataset, weights) + biases
+        test_logits = tf.matmul(tf_test_dataset, weights) + biases
+
+    with tf.name_scope('cross_entropy'):
+        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels, logits=train_logits))
+        # tf.scalar_summary('cross entropy', loss)
 
     # Optimizer.
     # We are going to find the minimum of this loss using gradient descent.
-    optimizer = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
+    with tf.name_scope('train'):
+        train_op = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
 
     # Predictions for the training, validation, and test data.
     # These are not part of training, but merely here so that we can report
     # accuracy figures as we train.
-    train_prediction = tf.nn.softmax(logits)
-    valid_prediction = tf.nn.softmax(
-        tf.matmul(tf_valid_dataset, weights) + biases)
-    test_prediction = tf.nn.softmax(tf.matmul(tf_test_dataset, weights) + biases)
+    with tf.name_scope("softmax"):
+        train_prediction = tf.nn.softmax(train_logits, name='train_pred.')
+        valid_prediction = tf.nn.softmax(valid_logits, name='valid_pred.')
+        test_prediction = tf.nn.softmax(test_logits, name='test_pred.')
+
+    with tf.name_scope('Accuracy'):
+        correct_prediction = tf.equal(tf.argmax(train_prediction, 1), tf.argmax(tf_train_labels, 1))
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        # tf.scalar_summary('Accuracy', accuracy)
+
 print("### End 4")
 
 # TODO:5
@@ -106,73 +123,104 @@ num_steps = 801
 
 
 def accuracy(predictions, labels):
-    return (100.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
-            / predictions.shape[0])
+    with tf.name_scope('Accuracy'):
+        return 100.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
 
+
+summary_op = tf.merge_all_summaries()
 
 with tf.Session(graph=graph) as session:
     # This is a one-time operation which ensures the parameters get initialized as
     # we described in the graph: random weights for the matrix, zeros for the
     # biases.
-    tf.initialize_all_variables().run()
+
+    # tf.initialize_all_variables().run()
+    session.run(tf.initialize_all_variables())
+
+    writer1 = tf.train.SummaryWriter(logs_path1, graph=tf.get_default_graph())
+
     print('Initialized')
     for step in range(num_steps):
         # Run the computations. We tell .run() that we want to run the optimizer,
         # and get the loss value and the training predictions returned as numpy
         # arrays.
-        _, l, predictions = session.run([optimizer, loss, train_prediction])
-        if (step % 100 == 0):
+        _, l, predictions = session.run([train_op, loss, train_prediction])
+
+        # write log
+        # writer1.add_summary(l, step)
+
+        if step % 100 == 0:
+            # summary_str = session.run(summary_op)
+            # writer1.add_summary(l, step)
             print('Loss at step %d: %f' % (step, l))
-            print('Training accuracy: %.1f%%' % accuracy(
-                predictions, train_labels[:train_subset, :]))
+            print('Training accuracy: %.1f%%' % accuracy(predictions, train_labels[:train_subset, :]))
             # Calling .eval() on valid_prediction is basically like calling run(), but
             # just to get that one numpy array. Note that it recomputes all its graph
             # dependencies.
-            print('Validation accuracy: %.1f%%' % accuracy(
-                valid_prediction.eval(), valid_labels))
+            print('Validation accuracy: %.1f%%' % accuracy(valid_prediction.eval(), valid_labels))
     print('Test accuracy: %.1f%%' % accuracy(test_prediction.eval(), test_labels))
 print("### End 5")
 
+writer1.close()
+
 # TODO:6==============================================================================
 print("### Start 6 ==============================================================================")
+logs_path2 = "/tmp/ufLearn/2"
+
 batch_size = 128
 
 graph = tf.Graph()
 with graph.as_default():
     # Input data. For the training data, we use a placeholder that will be fed
     # at run time with a training minibatch.
-    tf_train_dataset = tf.placeholder(tf.float32,
-                                      shape=(batch_size, image_size * image_size))
-    tf_train_labels = tf.placeholder(tf.float32, shape=(batch_size, num_labels))
+    with tf.name_scope('input'):
+        tf_train_dataset = tf.placeholder(tf.float32, shape=(batch_size, image_size * image_size))
+        tf_train_labels = tf.placeholder(tf.float32, shape=(batch_size, num_labels))
+
     tf_valid_dataset = tf.constant(valid_dataset)
     tf_test_dataset = tf.constant(test_dataset)
 
     # Variables.
-    weights = tf.Variable(
-        tf.truncated_normal([image_size * image_size, num_labels]))
-    biases = tf.Variable(tf.zeros([num_labels]))
+    with tf.name_scope("weights"):
+        weights = tf.Variable(tf.truncated_normal([image_size * image_size, num_labels]))
+    with tf.name_scope("biases"):
+        biases = tf.Variable(tf.zeros([num_labels]))
 
     # Training computation.
     logits = tf.matmul(tf_train_dataset, weights) + biases
-    loss = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels, logits=logits))
+    with tf.name_scope('cross_entropy'):
+        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels, logits=logits))
 
     # Optimizer.
-    optimizer = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
+    with tf.name_scope('train'):
+        optimizer = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
 
     # Predictions for the training, validation, and test data.
-    train_prediction = tf.nn.softmax(logits)
-    valid_prediction = tf.nn.softmax(
-        tf.matmul(tf_valid_dataset, weights) + biases)
+    with tf.name_scope("softmax"):
+        train_prediction = tf.nn.softmax(logits)
+    valid_prediction = tf.nn.softmax(tf.matmul(tf_valid_dataset, weights) + biases)
     test_prediction = tf.nn.softmax(tf.matmul(tf_test_dataset, weights) + biases)
+
 print("### End 6")
+
+
+def accuracy2(predictions, labels):
+    with tf.name_scope('Accuracy'):
+        return 100.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1)) / predictions.shape[0]
+
+
+summary_op = tf.merge_all_summaries()
 
 # TODO:7
 print("### Start 7")
 num_steps = 3001
 
 with tf.Session(graph=graph) as session:
-    tf.initialize_all_variables().run()
+    # tf.initialize_all_variables().run()
+    session.run(tf.initialize_all_variables())
+
+    writer2 = tf.train.SummaryWriter(logs_path2, graph=tf.get_default_graph())
+
     print("Initialized")
     for step in range(num_steps):
         # Pick an offset within the training data, which has been randomized.
@@ -185,12 +233,13 @@ with tf.Session(graph=graph) as session:
         # The key of the dictionary is the placeholder node of the graph to be fed,
         # and the value is the numpy array to feed to it.
         feed_dict = {tf_train_dataset: batch_data, tf_train_labels: batch_labels}
-        _, l, predictions = session.run(
-            [optimizer, loss, train_prediction], feed_dict=feed_dict)
-        if (step % 500 == 0):
+        _, l, predictions = session.run([optimizer, loss, train_prediction], feed_dict=feed_dict)
+
+        if step % 500 == 0:
             print("Minibatch loss at step %d: %f" % (step, l))
-            print("Minibatch accuracy: %.1f%%" % accuracy(predictions, batch_labels))
-            print("Validation accuracy: %.1f%%" % accuracy(
-                valid_prediction.eval(), valid_labels))
-    print("Test accuracy: %.1f%%" % accuracy(test_prediction.eval(), test_labels))
+            print("Minibatch accuracy: %.1f%%" % accuracy2(predictions, batch_labels))
+            print("Validation accuracy: %.1f%%" % accuracy2(valid_prediction.eval(), valid_labels))
+    print("Test accuracy: %.1f%%" % accuracy2(test_prediction.eval(), test_labels))
 print("### End 7")
+
+writer2.close()
