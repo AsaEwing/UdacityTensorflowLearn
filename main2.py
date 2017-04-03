@@ -136,8 +136,7 @@ def train():
         tf.scalar_summary('cross entropy', cross_entropy)
 
     with tf.name_scope('train'):
-        train_step = tf.train.AdamOptimizer(FLAGS.learning_rate).minimize(
-            cross_entropy)
+        train_step = tf.train.AdamOptimizer(FLAGS.learning_rate).minimize(cross_entropy)
 
     with tf.name_scope('accuracy'):
         with tf.name_scope('correct_prediction'):

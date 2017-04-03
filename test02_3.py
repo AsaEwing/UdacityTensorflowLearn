@@ -1,6 +1,6 @@
 from __future__ import print_function
 
-# python3 -m tensorflow.tensorboard --logdir=run1:/tmp/ufLearn/1,run2:/tmp/ufLearn/2 --port=6006
+# python3 -m tensorflow.tensorboard --logdir=run1:/tmp/ufLearn2/1 --port=6006
 
 # These are all the modules we'll be using later. Make sure you can import them
 # before proceeding further.
@@ -86,6 +86,16 @@ and adds a number of summary ops.
         return activations
 
 
+def conv2d(x, W):
+    with tf.name_scope('conv2d'):
+        return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+
+
+def WconvX_plus_b(x, w, b):
+    with tf.name_scope('WconvX_plus_b'):
+        return tf.nn.relu(tf.matmul(x, w) + b)
+        # return tf.nn.relu(conv2d(x, w) + b)
+
 train_dataset, train_labels = reformat(train_dataset, train_labels)
 valid_dataset, valid_labels = reformat(valid_dataset, valid_labels)
 test_dataset, test_labels = reformat(test_dataset, test_labels)
@@ -104,47 +114,61 @@ with graph.as_default():
     # Load the training, validation and test data into constants that are
     # attached to the graph.
     with tf.name_scope('input'):
-        tf_train_dataset = tf.constant(train_dataset[:train_subset, :], name='train_dataset')
-        tf_train_labels = tf.constant(train_labels[:train_subset], name='train_labels')
+        with tf.name_scope('train'):
+            tf_train_dataset = tf.constant(train_dataset[:train_subset, :], name='train_dataset')
+            tf_train_labels = tf.constant(train_labels[:train_subset], name='train_labels')
+        with tf.name_scope('valid'):
+            tf_valid_dataset = tf.constant(valid_dataset, name='valid_dataset')
+        with tf.name_scope('test'):
+            tf_test_dataset = tf.constant(test_dataset, name='test_dataset')
 
-        tf_valid_dataset = tf.constant(valid_dataset, name='valid_dataset')
-        tf_test_dataset = tf.constant(test_dataset, name='test_dataset')
-
-    # Variables.
-    # These are the parameters that we are going to be training. The weight
-    # matrix will be initialized using random values following a (truncated)
-    # normal distribution. The biases get initialized to zero.
-    with tf.name_scope("weights"):
-        weights = tf.Variable(tf.truncated_normal([image_size * image_size, num_labels]), name='W')
-    with tf.name_scope("biases"):
-        biases = tf.Variable(tf.zeros([num_labels]), name='b')
-
-    # Training computation.
-    # We multiply the inputs with the weight matrix, and add biases. We compute
-    # the softmax and cross-entropy (it's one operation in TensorFlow, because
-    # it's very common, and it can be optimized). We take the average of this
-    # cross-entropy across all training examples: that's our loss.
     with tf.name_scope('Layer'):
-        train_logits = tf.matmul(tf_train_dataset, weights) + biases
-        valid_logits = tf.matmul(tf_valid_dataset, weights) + biases
-        test_logits = tf.matmul(tf_test_dataset, weights) + biases
+        with tf.name_scope("weights"):
+            weights = tf.Variable(tf.truncated_normal([image_size * image_size, 200]), name='W')
+        with tf.name_scope("biases"):
+            biases = tf.Variable(tf.zeros([200]), name='b')
+        with tf.name_scope('train_Wx_b'):
+            # train_logits = tf.matmul(tf_train_dataset, weights) + biases
+            train_logits = WconvX_plus_b(tf_train_dataset, weights, biases)
+        with tf.name_scope('valid_Wx_b'):
+            # valid_logits = tf.matmul(tf_valid_dataset, weights) + biases
+            valid_logits = WconvX_plus_b(tf_valid_dataset, weights, biases)
+        with tf.name_scope('test_Wx_b'):
+            # test_logits = tf.matmul(tf_test_dataset, weights) + biases
+            test_logits = WconvX_plus_b(tf_test_dataset, weights, biases)
+
+    with tf.name_scope('Layer2'):
+        with tf.name_scope("weights2"):
+            weights2 = tf.Variable(tf.truncated_normal([200, num_labels]), name='W')
+        with tf.name_scope("biases2"):
+            biases2 = tf.Variable(tf.zeros([num_labels]), name='b')
+        with tf.name_scope('train_Wx_b2'):
+            # train_logits2 = tf.matmul(train_logits, weights2) + biases2
+            train_logits2 = WconvX_plus_b(train_logits, weights2, biases2)
+        with tf.name_scope('valid_Wx_b2'):
+            # valid_logits2 = tf.matmul(valid_logits, weights2) + biases2
+            valid_logits2 = WconvX_plus_b(valid_logits, weights2, biases2)
+        with tf.name_scope('test_Wx_b2'):
+            # test_logits2 = tf.matmul(test_logits, weights2) + biases2
+            test_logits2 = WconvX_plus_b(test_logits, weights2, biases2)
 
     with tf.name_scope('cross_entropy'):
-        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels, logits=train_logits))
+        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels, logits=train_logits2))
         # tf.scalar_summary('cross entropy', loss)
 
     # Optimizer.
     # We are going to find the minimum of this loss using gradient descent.
     with tf.name_scope('train'):
-        train_op = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
+        # train_op = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
+        train_op = tf.train.AdamOptimizer(0.01).minimize(loss)
 
     # Predictions for the training, validation, and test data.
     # These are not part of training, but merely here so that we can report
     # accuracy figures as we train.
     with tf.name_scope("softmax"):
-        train_prediction = tf.nn.softmax(train_logits, name='train_pred.')
-        valid_prediction = tf.nn.softmax(valid_logits, name='valid_pred.')
-        test_prediction = tf.nn.softmax(test_logits, name='test_pred.')
+        train_prediction = tf.nn.softmax(train_logits2, name='train_pred.')
+        valid_prediction = tf.nn.softmax(valid_logits2, name='valid_pred.')
+        test_prediction = tf.nn.softmax(test_logits2, name='test_pred.')
 
     with tf.name_scope('Accuracy'):
         correct_prediction = tf.equal(tf.argmax(train_prediction, 1), tf.argmax(tf_train_labels, 1))
