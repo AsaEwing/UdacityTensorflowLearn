@@ -12,36 +12,65 @@ class Timer(object):
         self.Time_End = 0
         self.name = name
 
-        print("~ # %s 程式開始" % self.name)
+        print("\n~ # %s 程式開始\n" % self.name)
         return
+
+    def operation_time(self, deltaTime):
+        mHour = 0
+        mMin = 0
+        mS = 0
+        mMs = 0
+        if deltaTime > 3600000:
+            mHour = int(deltaTime / 3600000)
+            deltaTime = deltaTime % 3600000
+        if deltaTime > 60000:
+            mMin = int(deltaTime / 60000)
+            deltaTime = deltaTime % 60000
+        if deltaTime > 1000:
+            mS = int(deltaTime / 1000)
+            mMs = deltaTime % 1000
+
+        return [mHour, mMin, mS, mMs]
 
     def now(self, remind=""):
         self.Time_End = time.time() * 1000
         deltaTime = float(self.Time_End - self.Time_AllStart)
+        timeList = self.operation_time(deltaTime)
 
-        if deltaTime > 3600000:
-            print('~ # %s 已過時間：%08.3f h' % (remind, float(deltaTime / 3600000)))
-        elif deltaTime > 60000:
-            print('~ # %s 已過時間：%08.3f min' % (remind, float(deltaTime / 60000)))
-        elif deltaTime > 1000:
-            print('~ # %s 已過時間：%08.3f s' % (remind, float(deltaTime / 1000)))
+        if timeList[0] > 0:
+            print('\n~ # %s 已過時間：%d h, %d min, %d s, %d ms' % (
+                remind, timeList[0], timeList[1], timeList[2], timeList[3]))
+
+        elif timeList[1] > 0:
+            print('\n~ # %s 已過時間：%d h, %d min, %d s, %d ms' % (
+                remind, timeList[0], timeList[1], timeList[2], timeList[3]))
+        elif timeList[2] > 0:
+            print('\n~ # %s 已過時間：%d h, %d min, %d s, %d ms' % (
+                remind, timeList[0], timeList[1], timeList[2], timeList[3]))
         else:
-            print('~ # %s 已過時間：%08.3f ms' % (remind, float(deltaTime)))
+            print('\n~ # %s 已過時間：%d h, %d min, %d s, %d ms' % (
+                remind, timeList[0], timeList[1], timeList[2], timeList[3]))
 
         return
 
     def end(self):
         self.Time_End = time.time() * 1000
         deltaTime = float(self.Time_End - self.Time_AllStart)
+        timeList = self.operation_time(deltaTime)
 
-        if deltaTime > 3600000:
-            print('\n~ # %s 程式結束，時間共：%08.3f h' % (self.name, float(deltaTime / 3600000)))
-        elif deltaTime > 60000:
-            print('\n~ # %s 程式結束，時間共：%08.3f min' % (self.name, float(deltaTime / 60000)))
-        elif deltaTime > 1000:
-            print('\n~ # %s 程式結束，時間共：%08.3f s' % (self.name, float(deltaTime / 1000)))
+        if timeList[0] > 0:
+            print('\n~ # %s 程式結束，時間共：%d h, %d min, %d s, %d ms' % (
+                self.name, timeList[0], timeList[1], timeList[2], timeList[3]))
+
+        elif timeList[1] > 0:
+            print('\n~ # %s 程式結束，時間共：%d h, %d min, %d s, %d ms' % (
+                self.name, timeList[0], timeList[1], timeList[2], timeList[3]))
+        elif timeList[2] > 0:
+            print('\n~ # %s 程式結束，時間共：%d h, %d min, %d s, %d ms' % (
+                self.name, timeList[0], timeList[1], timeList[2], timeList[3]))
         else:
-            print('\n~ # %s 程式結束，時間共：%08.3f ms' % (self.name, float(deltaTime)))
+            print('\n~ # %s 程式結束，時間共：%d h, %d min, %d s, %d ms' % (
+                self.name, timeList[0], timeList[1], timeList[2], timeList[3]))
 
         return
 
