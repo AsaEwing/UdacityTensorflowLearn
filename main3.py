@@ -117,6 +117,8 @@ with tf.Session(graph=graph) as session:
         train_step.run(feed_dict={x_in: batch[0], y_in: batch[1], keep_prob: 0.5})
 
     # accuracy on test
-    print("test accuracy %g" % (accuracy.eval(feed_dict={x_in: mnist.test.images, y_in: mnist.test.labels, keep_prob: 1.0})))
+    print("test accuracy %g" % (accuracy.eval(feed_dict={x_in: mnist.test.images,
+                                                         y_in: mnist.test.labels,
+                                                         keep_prob: 1.0})))
 
 writer.close()

@@ -9,20 +9,37 @@ from ClassOfTensorflow2 import Timer
 from ClassOfTensorflow2 import Graph
 
 
-# python3 -m tensorflow.tensorboard --logdir=run1:/tmp/ufLearn4/1 --port=6006
+# python3 -m tensorflow.tensorboard --logdir=run1:/tmp/ufLearn4/3 --port=6006
+'''
+Minibatch loss at step 20000 , 201 : 0.851310 ,rate 0.0368712 :
+   Minibatch accuracy    : 87.50% , -81, 67
+   Validation accuracy   : 88.52% , -113, 23
+   Test accuracy         : 94.39% , -121, 7
+
+~ # Train finish
+   Minibatch accuracy max    : 100.00%
+   Validation accuracy max   : 88.93%
+   Test accuracy max         : 95.04%
+
+~ #  已過時間：0 h, 38 min, 28 s, 661 ms
+'''
 
 
 class Constant(object):
     def __init__(self, is1D):
+        self.fileName = "test04_3"
         self.size_image = 28
-        self.size_batch = 16
+        self.size_batch = 8
 
         self.num_labels = 10
-        self.num_steps = 80001
+        self.num_steps = 20001
 
         self.patch_size = 5
-        self.depth = 16
-        self.num_hidden = 64
+        self.depth = 8
+        self.depth2 = 16
+        self.num_hidden = 256
+        self.num_hidden2 = 32
+
         self.num_channels = 1
 
         if type(is1D) == bool:
@@ -32,23 +49,33 @@ class Constant(object):
             print("'is1D' is not bool")
             sys.exit()
 
-        self._keep_prob = [None, None, None, None]
-        self.layerCount = 4
+        self._keep_prob = [0.9, 0.7, 0.7, 0.5, None]
+        self.layerCount = 5
         self.layer_input_dim = [[self.patch_size, self.patch_size, self.num_channels, self.depth],
-                                [self.patch_size, self.patch_size, self.depth, self.depth],
-                                [self.size_image // 4 * self.size_image // 4 * self.depth, self.num_hidden],
-                                [self.num_hidden, self.num_labels]]
+                                [self.patch_size, self.patch_size, self.depth, self.depth2],
+                                [self.size_image // 4 * self.size_image // 4 * self.depth2, self.num_hidden],
+                                [self.num_hidden, self.num_hidden2],
+                                [self.num_hidden2, self.num_labels]]
 
         self.layer_output_dim = [[self.depth],
-                                 [self.depth],
+                                 [self.depth2],
                                  [self.num_hidden],
+                                 [self.num_hidden2],
                                  [self.num_labels]]
-        self.layer_isRelu = [True, True, True, False]
-        self.layer_kind = ["Conv", "Conv", "Normal", "Normal"]
+        self.layer_isRelu = [True, True, True, True, False]
+        self.layer_kind = ["Conv", "Conv", "Normal", "Normal", "Normal"]
+        self.pool_kind = ["Max", "Max", None, None, None]
 
-        self.loss_beta_w = None
-        self.loss_beta_b = None
+        self.loss_beta_w = 0.0005
+        self.loss_beta_b = 0.0001
 
+        # no write
+        self.justVar()
+
+        return
+
+    def justVar(self):
+        # no write
         self.maxAccuracyMinibatch = 0
         self.maxAccuracyValidation = 0
         self.maxAccuracyTest = 0
@@ -67,18 +94,17 @@ class Constant(object):
 
         self.countPrintStep = 0
 
-        return
-
     def keep_prob(self, index):
-        return self._keep_prob[index - 1]
+        return self._keep_prob[index]
 
 
-logs_path2 = "/tmp/ufLearn4/1"
+logs_path2 = "/tmp/ufLearn4/3"
 
 pickle_file = 'notMNIST.pickle'
 num_stddev = 0.1
 
 constant = Constant(False)
+trainTimer = Timer(constant.fileName)
 
 
 def trainEnd():
@@ -87,10 +113,10 @@ def trainEnd():
     print("   Validation accuracy max   : %.2f%%" % constant.maxAccuracyValidation)
     print("   Test accuracy max         : %.2f%%" % constant.maxAccuracyTest)
 
+    trainTimer.now()
+
 
 def train():
-    trainTimer = Timer("test04_1")
-
     with open(pickle_file, 'rb') as f:
         save = pickle.load(f)
         train_dataset = save['train_dataset']
@@ -131,7 +157,7 @@ def train():
         valid_image_in = tf.constant(valid_dataset)
         test_image_in = tf.constant(test_dataset)
 
-        self_graph = Graph("test04_1")
+        self_graph = Graph(constant.fileName)
 
         trainLayer = self_graph.def_train_Layer(self_graph,
                                                 constant.layerCount,
@@ -139,7 +165,8 @@ def train():
                                                 constant.layer_kind)
         trainLayer.set_LayerVar(constant.layer_isRelu, constant.keep_prob, 0.1)
         trainLayer.set_LayerSize(constant.layer_input_dim, constant.layer_output_dim)
-        trainLayer.set_LayerConv([1, 2, 2, 1], "SAME")
+        trainLayer.set_LayerConv(strides=[1, 1, 1, 1], padding="SAME")
+        trainLayer.set_LayerPool(kind=constant.pool_kind, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
         trainLayer.finish()
 
         self_graph.softmax()
@@ -148,7 +175,7 @@ def train():
         valid_logits_List, valid_prediction = self_graph.test_logits("valid", valid_image_in)
         test_logits_List, test_prediction = self_graph.test_logits("test", test_image_in)
 
-        self_graph.train(True, 0.05, "GradientDescentOptimizer", 0.97, 2000)
+        self_graph.train(True, 0.002, "AdamOptimizer", 0.98, 2000)
 
     with tf.Session(graph=graph) as session:
         session.run(tf.initialize_all_variables())
@@ -178,44 +205,47 @@ def train():
 
                 constant.countPrintStep += 1
 
-                # Max
-                if accuracyMinibatch >= constant.maxAccuracyMinibatch:
-                    constant.maxAccuracyMinibatch = accuracyMinibatch
-                    constant.countAll_accuracyMinibatch += 1
-                else:
-                    constant.countAll_accuracyMinibatch -= 1
+                def accuracyAll():
+                    # Max
+                    if accuracyMinibatch >= constant.maxAccuracyMinibatch:
+                        constant.maxAccuracyMinibatch = accuracyMinibatch
+                        constant.countAll_accuracyMinibatch += 1
+                    else:
+                        constant.countAll_accuracyMinibatch -= 1
 
-                if accuracyValidation >= constant.maxAccuracyValidation:
-                    constant.maxAccuracyValidation = accuracyValidation
-                    constant.countAll_accuracyValidation += 1
-                else:
-                    constant.countAll_accuracyValidation -= 1
+                    if accuracyValidation >= constant.maxAccuracyValidation:
+                        constant.maxAccuracyValidation = accuracyValidation
+                        constant.countAll_accuracyValidation += 1
+                    else:
+                        constant.countAll_accuracyValidation -= 1
 
-                if accuracyTest >= constant.maxAccuracyTest:
-                    constant.maxAccuracyTest = accuracyTest
-                    constant.countAll_accuracyTest += 1
-                else:
-                    constant.countAll_accuracyTest -= 1
+                    if accuracyTest >= constant.maxAccuracyTest:
+                        constant.maxAccuracyTest = accuracyTest
+                        constant.countAll_accuracyTest += 1
+                    else:
+                        constant.countAll_accuracyTest -= 1
 
-                # Last
-                if accuracyMinibatch >= constant.lastAccuracyMinibatch:
-                    constant.countLast_accuracyMinibatch += 1
-                else:
-                    constant.countLast_accuracyMinibatch -= 1
+                    # Last
+                    if accuracyMinibatch >= constant.lastAccuracyMinibatch:
+                        constant.countLast_accuracyMinibatch += 1
+                    else:
+                        constant.countLast_accuracyMinibatch -= 1
 
-                if accuracyValidation >= constant.lastAccuracyValidation:
-                    constant.countLast_accuracyValidation += 1
-                else:
-                    constant.countLast_accuracyValidation -= 1
+                    if accuracyValidation >= constant.lastAccuracyValidation:
+                        constant.countLast_accuracyValidation += 1
+                    else:
+                        constant.countLast_accuracyValidation -= 1
 
-                if accuracyTest >= constant.lastAccuracyTest:
-                    constant.countLast_accuracyTest += 1
-                else:
-                    constant.countLast_accuracyTest -= 1
+                    if accuracyTest >= constant.lastAccuracyTest:
+                        constant.countLast_accuracyTest += 1
+                    else:
+                        constant.countLast_accuracyTest -= 1
 
-                constant.lastAccuracyMinibatch = accuracyMinibatch
-                constant.lastAccuracyValidation = accuracyValidation
-                constant.lastAccuracyTest = accuracyTest
+                    constant.lastAccuracyMinibatch = accuracyMinibatch
+                    constant.lastAccuracyValidation = accuracyValidation
+                    constant.lastAccuracyTest = accuracyTest
+
+                accuracyAll()
 
                 print("\nMinibatch loss at step %d , %d : %f ,rate %s :" % (step, constant.countPrintStep, l,
                                                                             self_graph.learning_rate.eval()))
@@ -229,8 +259,7 @@ def train():
                                                                       constant.countAll_accuracyTest,
                                                                       constant.countLast_accuracyTest))
 
-            if step % 5000 == 0:
-                trainTimer.now()
+            if step % 5000 == 0 and step != 0:
                 trainEnd()
                 print("######################################")
         print('Test accuracy: %.1f%%' % accuracy(test_prediction.eval(), test_labels))

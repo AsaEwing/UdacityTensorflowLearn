@@ -114,7 +114,8 @@ class LayerNormal(object):
     def set_b(self, bias):
         self.b = bias
 
-    def Wx_plus_b(self, inX, w, b):
+    @staticmethod
+    def Wx_plus_b(inX, w, b):
         with tf.name_scope('WX_b'):
             return tf.matmul(inX, w) + b
 
@@ -137,11 +138,12 @@ class LayerNormal(object):
 
 
 class LayerConv(object):
-    def __init__(self, name, inputTensor, isRelu):
+    def __init__(self, name, inputTensor, isRelu, keep_prob=None, poolKind=None):
         self.name = name
         self.input = inputTensor
         self.isRelu = isRelu
-        #self.keep_prob = keep_prob
+        self.poolKind = poolKind
+        self.keep_prob = keep_prob
 
         self.w = None
         self.b = None
@@ -150,6 +152,7 @@ class LayerConv(object):
         self.b_constant = None
         self.conv_constant = None
         self.max_pool_constant = None
+
         return
 
     def _w_init(self):
@@ -184,13 +187,15 @@ class LayerConv(object):
     def max_pool_2x2_var(self, ksize=None, strides=None, padding='SAME'):
         self.max_pool_constant = {'ksize': ksize, 'strides': strides, 'padding': padding}
 
-    def _conv_2d(self, x, W, strides=None, padding='SAME'):
+    @staticmethod
+    def _conv_2d(x, W, strides=None, padding='SAME'):
         if strides is None:
             strides = [1, 1, 1, 1]
         with tf.name_scope('conv2d'):
             return tf.nn.conv2d(x, W, strides=strides, padding=padding)
 
-    def _max_pool_2x2(self, x, ksize=None, strides=None, padding='SAME'):
+    @staticmethod
+    def _max_pool_2x2(x, ksize=None, strides=None, padding='SAME'):
         if strides is None:
             strides = [1, 2, 2, 1]
         if ksize is None:
@@ -200,9 +205,11 @@ class LayerConv(object):
 
     def _W_conv_X_plus_b(self, inX, w, b):
         with tf.name_scope('WcX_b'):
-            return self._conv_2d(inX, w,
-                                 strides=self.conv_constant['strides'],
-                                 padding=self.conv_constant['padding']) + b
+            tmpLayer = self._conv_2d(inX, w,
+                                     strides=self.conv_constant['strides'],
+                                     padding=self.conv_constant['padding']) + b
+
+            return tmpLayer
 
     def finish(self):
         with tf.name_scope(self.name):
@@ -217,6 +224,16 @@ class LayerConv(object):
                 with tf.name_scope('Relu'):
                     self.layer = tf.nn.relu(self.layer)
 
+            if self.keep_prob is not None:
+                with tf.name_scope('dropout'):
+                    self.layer = tf.nn.dropout(self.layer, self.keep_prob)
+
+            if self.poolKind == "Max":
+                self.layer = self._max_pool_2x2(self.layer,
+                                                ksize=self.max_pool_constant['ksize'],
+                                                strides=self.max_pool_constant['strides'],
+                                                padding=self.max_pool_constant['padding'])
+
             '''if self.keep_prob is not None:
                 with tf.name_scope('dropout'):
                     self.layer = tf.nn.dropout(self.layer, self.keep_prob)'''
@@ -228,6 +245,10 @@ class Graph(object):
         self.countLayer = 0
         self.layerList = []
         self.layerList_kind = []
+        self.poolList_kind = []
+        self.poolList_ksize = []
+        self.poolList_strides = []
+        self.poolList_padding = []
 
         self.softmax_out = None
         self.loss = None
@@ -240,18 +261,29 @@ class Graph(object):
     def add_LayerNormal(self, inputT, isRelu, keep_prob=None):
         self.countLayer += 1
         layerName = "Layer%02d" % self.countLayer
-        Layer = LayerNormal(layerName, inputT, isRelu, keep_prob)
+        Layer = LayerNormal(name=layerName,
+                            inputTensor=inputT,
+                            isRelu=isRelu,
+                            keep_prob=keep_prob)
         self.layerList.append(Layer)
         self.layerList_kind.append("Normal")
+        self.poolList_kind.append(None)
 
         return Layer
 
-    def add_LayerConv(self, inputT, isRelu, keep_prob=None):
+    def add_LayerConv(self, inputT, isRelu, poolKind, keep_prob=None):
         self.countLayer += 1
         layerName = "Layer%02d" % self.countLayer
-        Layer = LayerConv(layerName, inputT, isRelu)
+        Layer = LayerConv(name=layerName,
+                          inputTensor=inputT,
+                          isRelu=isRelu,
+                          poolKind=poolKind,
+                          keep_prob=keep_prob)
+        '''if poolKind == "Max":
+            Layer = Layer.max_pool_2x2_var()'''
         self.layerList.append(Layer)
         self.layerList_kind.append("Conv")
+        self.poolList_kind.append(poolKind)
 
         return Layer
 
@@ -281,7 +313,8 @@ class Graph(object):
             self.loss += l2_loss_w + l2_loss_b
         return self.loss
 
-    def def_train_Layer(self, mGraph, layerCount, inputTensor, layer_kind):
+    @staticmethod
+    def def_train_Layer(mGraph, layerCount, inputTensor, layer_kind):
         return TrainLayer(mGraph, layerCount, inputTensor, layer_kind)
 
     def train(self, needDecay, starter_learning_rate, kind_optimizer, deltaRate=None, deltaStep=None):
@@ -293,13 +326,13 @@ class Graph(object):
                                                                 deltaRate,
                                                                 staircase=True)
                 if kind_optimizer == "GradientDescentOptimizer":
-                    self.optimizer = tf.train.GradientDescentOptimizer(self.learning_rate)\
-                                        .minimize(self.loss,
-                                                  global_step=global_step)
+                    self.optimizer = tf.train.GradientDescentOptimizer(self.learning_rate) \
+                        .minimize(self.loss,
+                                  global_step=global_step)
                 elif kind_optimizer == "AdamOptimizer":
-                    self.optimizer = tf.train.AdamOptimizer(self.learning_rate)\
-                                        .minimize(self.loss,
-                                                  global_step=global_step)
+                    self.optimizer = tf.train.AdamOptimizer(self.learning_rate) \
+                        .minimize(self.loss,
+                                  global_step=global_step)
 
             elif not needDecay:
                 self.learning_rate = starter_learning_rate
@@ -333,22 +366,35 @@ class Graph(object):
                         mInputTensor = layerList[ii - 1].layer
 
                 if self.layerList_kind[ii] == "Normal":
-                    layer = LayerNormal(layerName, mInputTensor,
-                                        self.layerList[ii].isRelu,
-                                        self.layerList[ii].keep_prob)
+                    layer = LayerNormal(name=layerName,
+                                        inputTensor=mInputTensor,
+                                        isRelu=self.layerList[ii].isRelu,
+                                        keep_prob=self.layerList[ii].keep_prob)
 
                     layer.set_w(self.layerList[ii].w)
                     layer.set_b(self.layerList[ii].b)
                     layer.finish()
 
                 elif self.layerList_kind[ii] == "Conv":
-                    layer = LayerConv(layerName, mInputTensor,
-                                      self.layerList[ii].isRelu)
+                    layer = LayerConv(name=layerName,
+                                      inputTensor=mInputTensor,
+                                      isRelu=self.layerList[ii].isRelu,
+                                      poolKind=self.poolList_kind[ii],
+                                      keep_prob=self.layerList[ii].keep_prob)
 
                     layer.set_w(self.layerList[ii].w)
                     layer.set_b(self.layerList[ii].b)
                     layer.conv_2d_var(strides=self.layerList[ii].conv_constant['strides'],
                                       padding=self.layerList[ii].conv_constant['padding'])
+                    '''if self.poolList_kind is not None:
+                        if self.poolList_kind[ii] == "Max":
+                            layer.max_pool_2x2_var(ksize=self.layerList[ii].max_pool_constant['ksize'],
+                                                   strides=self.layerList[ii].max_pool_constant['strides'],
+                                                   padding=self.layerList[ii].max_pool_constant['padding'])'''
+                    if self.layerList[ii].poolKind == "Max":
+                        layer.max_pool_2x2_var(ksize=self.layerList[ii].max_pool_constant['ksize'],
+                                               strides=self.layerList[ii].max_pool_constant['strides'],
+                                               padding=self.layerList[ii].max_pool_constant['padding'])
                     layer.finish()
                 else:
                     print("layer_kind is error.\nNeed Normal or Conv")
@@ -377,6 +423,14 @@ class TrainLayer(object):
         self.layer_input_dim = None
         self.layer_output_dim = None
 
+        self.conv_strides = None
+        self.conv_padding = None
+
+        self.pool_kindList = None
+        self.pool_ksize = None
+        self.pool_strides = None
+        self.pool_padding = None
+
         return
 
     def set_LayerVar(self, layer_isRelu, layer_keep_prob, stddev):
@@ -387,6 +441,16 @@ class TrainLayer(object):
     def set_LayerSize(self, layer_input_dim, layer_output_dim):
         self.layer_input_dim = layer_input_dim
         self.layer_output_dim = layer_output_dim
+
+    def set_LayerConv(self, strides=None, padding=None):
+        self.conv_strides = strides
+        self.conv_padding = padding
+
+    def set_LayerPool(self, kind=None, ksize=None, strides=None, padding=None):
+        self.pool_kindList = kind
+        self.pool_ksize = ksize
+        self.pool_strides = strides
+        self.pool_padding = padding
 
     def finish(self):
         for ii in range(0, self.layerCount):
@@ -401,22 +465,33 @@ class TrainLayer(object):
                     mInputTensor = self.layerList[ii - 1].layer
 
             if self.layer_kind[ii] == "Normal":
-                layer = self.graph.add_LayerNormal(mInputTensor,
-                                                   self.layer_isRelu[ii],
-                                                   self.layer_keep_prob(ii))
+                layer = self.graph.add_LayerNormal(inputT=mInputTensor,
+                                                   isRelu=self.layer_isRelu[ii],
+                                                   keep_prob=self.layer_keep_prob(ii))
 
                 layer.w_var(shape=self.layer_input_dim[ii], stddev=self.stddev)
                 layer.b_var(shape=self.layer_output_dim[ii])
                 layer.finish()
 
             elif self.layer_kind[ii] == "Conv":
-                layer = self.graph.add_LayerConv(mInputTensor,
-                                                 self.layer_isRelu[ii],
-                                                 self.layer_keep_prob(ii))
+                if self.pool_kindList is not None:
+                    tmpPoolKind = self.pool_kindList[ii]
+                else:
+                    tmpPoolKind = None
+                layer = self.graph.add_LayerConv(inputT=mInputTensor,
+                                                 isRelu=self.layer_isRelu[ii],
+                                                 poolKind=tmpPoolKind,
+                                                 keep_prob=self.layer_keep_prob(ii))
 
                 layer.w_var(shape=self.layer_input_dim[ii], stddev=self.stddev)
                 layer.b_var(shape=self.layer_output_dim[ii])
-                layer.conv_2d_var(strides=[1, 2, 2, 1], padding='SAME')
+                layer.conv_2d_var(strides=self.conv_strides,
+                                  padding=self.conv_padding)
+                if self.pool_kindList is not None:
+                    if self.pool_kindList[ii] == "Max":
+                        layer.max_pool_2x2_var(ksize=self.pool_ksize,
+                                               strides=self.pool_strides,
+                                               padding=self.pool_padding)
                 layer.finish()
             else:
                 print("layer_kind is error.\nNeed Normal or Conv")
