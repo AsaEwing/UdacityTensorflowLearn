@@ -22,6 +22,70 @@ Minibatch loss at step 20000 , 201 : 0.851310 ,rate 0.0368712 :
    Test accuracy max         : 95.04%
 
 ~ #  已過時間：0 h, 38 min, 28 s, 661 ms
+
+~ # Train finish
+   Minibatch accuracy max    : 100.00%
+   Validation accuracy max   : 85.93%
+   Test accuracy max         : 92.21%
+
+~ #  已過時間：0 h, 25 min, 52 s, 251 ms
+
+~ # Train finish
+   Minibatch accuracy max    : 100.00%
+   Validation accuracy max   : 86.04%
+   Test accuracy max         : 92.22%
+
+~ #  已過時間：0 h, 24 min, 13 s, 673 ms
+
+~ # Train finish
+   Minibatch accuracy max    : 100.00%
+   Validation accuracy max   : 86.15%
+   Test accuracy max         : 92.41%
+
+~ #  已過時間：0 h, 24 min, 24 s, 896 ms
+
+~ # Train finish
+   Minibatch accuracy max    : 100.00%
+   Validation accuracy max   : 86.16%
+   Test accuracy max         : 92.51%
+
+~ #  已過時間：0 h, 30 min, 37 s, 961 ms
+
+~ # Train finish
+   Minibatch accuracy max    : 100.00%
+   Validation accuracy max   : 86.23%
+   Test accuracy max         : 92.89%
+
+~ #  已過時間：0 h, 43 min, 44 s, 824 ms
+
+~ # Train finish
+   Minibatch accuracy max    : 100.00%
+   Validation accuracy max   : 87.02%
+   Test accuracy max         : 93.54%
+
+~ #  已過時間：0 h, 43 min, 28 s, 776 ms
+'''
+'''
+~ # Train finish
+   Minibatch accuracy max    : 100.00%
+   Validation accuracy max   : 88.14%
+   Test accuracy max         : 94.26%
+
+~ #  已過時間：0 h, 51 min, 9 s, 702 ms
+
+~ # Train finish
+   Minibatch accuracy max    : 100.00%
+   Validation accuracy max   : 88.33%
+   Test accuracy max         : 94.41%
+
+~ #  已過時間：0 h, 57 min, 37 s, 66 ms
+
+~ # Train finish
+   Minibatch accuracy max    : 100.00%
+   Validation accuracy max   : 88.32%
+   Test accuracy max         : 94.61%
+
+~ #  已過時間：0 h, 59 min, 58 s, 933 ms
 '''
 
 
@@ -29,16 +93,16 @@ class Constant(object):
     def __init__(self, is1D):
         self.fileName = "test04_3"
         self.size_image = 28
-        self.size_batch = 8
+        self.size_batch = 16
 
         self.num_labels = 10
-        self.num_steps = 20001
+        self.num_steps = 30001
 
         self.patch_size = 5
-        self.depth = 8
-        self.depth2 = 16
+        self.depth = 15
+        self.depth2 = 30
         self.num_hidden = 256
-        self.num_hidden2 = 32
+        self.num_hidden2 = 64
 
         self.num_channels = 1
 
@@ -49,7 +113,7 @@ class Constant(object):
             print("'is1D' is not bool")
             sys.exit()
 
-        self._keep_prob = [0.9, 0.7, 0.7, 0.5, None]
+        self._keep_prob = [0.9, 0.5, 0.9, 0.5, None]
         self.layerCount = 5
         self.layer_input_dim = [[self.patch_size, self.patch_size, self.num_channels, self.depth],
                                 [self.patch_size, self.patch_size, self.depth, self.depth2],
@@ -67,7 +131,7 @@ class Constant(object):
         self.pool_kind = ["Max", "Max", None, None, None]
 
         self.loss_beta_w = 0.0005
-        self.loss_beta_b = 0.0001
+        self.loss_beta_b = 0.0002
 
         # no write
         self.justVar()
@@ -101,7 +165,7 @@ class Constant(object):
 logs_path2 = "/tmp/ufLearn4/3"
 
 pickle_file = 'notMNIST.pickle'
-num_stddev = 0.1
+# num_stddev = 0.1
 
 constant = Constant(False)
 trainTimer = Timer(constant.fileName)
@@ -175,9 +239,10 @@ def train():
         valid_logits_List, valid_prediction = self_graph.test_logits("valid", valid_image_in)
         test_logits_List, test_prediction = self_graph.test_logits("test", test_image_in)
 
-        self_graph.train(True, 0.002, "AdamOptimizer", 0.98, 2000)
+        self_graph.train(True, 0.005, "AdamOptimizer", 0.85, 2000)
 
-    with tf.Session(graph=graph) as session:
+    with tf.Session(graph=graph, config=tf.ConfigProto(log_device_placement=True)) as session:
+        # with tf.Session(graph=graph) as session:
         session.run(tf.initialize_all_variables())
 
         writer = tf.train.SummaryWriter(logs_path2, graph=tf.get_default_graph())
@@ -246,23 +311,27 @@ def train():
                     constant.lastAccuracyTest = accuracyTest
 
                 accuracyAll()
+                '''
 
                 print("\nMinibatch loss at step %d , %d : %f ,rate %s :" % (step, constant.countPrintStep, l,
                                                                             self_graph.learning_rate.eval()))
-                print("   Minibatch accuracy    : %.2f%% , %d, %d" % (accuracyMinibatch,
-                                                                      constant.countAll_accuracyMinibatch,
-                                                                      constant.countLast_accuracyMinibatch))
-                print("   Validation accuracy   : %.2f%% , %d, %d" % (accuracyValidation,
-                                                                      constant.countAll_accuracyValidation,
-                                                                      constant.countLast_accuracyValidation))
-                print("   Test accuracy         : %.2f%% , %d, %d" % (accuracyTest,
-                                                                      constant.countAll_accuracyTest,
-                                                                      constant.countLast_accuracyTest))
+                print("   Minibatch accuracy    : {:.2f}% , {:d}, {:d}".format(accuracyMinibatch,
+                                                                               constant.countAll_accuracyMinibatch,
+                                                                               constant.countLast_accuracyMinibatch))
+                print("   Validation accuracy   : {:.2f}% , {:d}, {:d}".format(accuracyValidation,
+                                                                               constant.countAll_accuracyValidation,
+                                                                               constant.countLast_accuracyValidation))
+                print("   Test accuracy         : {:.2f}% , {:d}, {:d}".format(accuracyTest,
+                                                                               constant.countAll_accuracyTest,
+                                                                               constant.countLast_accuracyTest))
+                '''
 
-            if step % 5000 == 0 and step != 0:
+            if step % 1000 == 0 and step != 0:
+                print("\nMinibatch loss at step %d , %d : %f ,rate %s :" % (step, constant.countPrintStep, l,
+                                                                            self_graph.learning_rate.eval()))
                 trainEnd()
-                print("######################################")
-        print('Test accuracy: %.1f%%' % accuracy(test_prediction.eval(), test_labels))
+                print("######################################\n")
+        print('Test accuracy the last time : %.1f%%' % accuracy(test_prediction.eval(), test_labels))
 
     writer.close()
     trainTimer.end()

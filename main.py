@@ -30,7 +30,7 @@ with tf.name_scope("weights"):
 # bias
 with tf.name_scope("biases"):
     b = tf.Variable(tf.zeros([10]))
-d
+
 # implement model
 with tf.name_scope("softmax"):
     # y is our prediction
